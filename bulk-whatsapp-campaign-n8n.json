@@ -1,0 +1,399 @@
+{
+  "name": "Bulk_WhatsApp_HDL",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Bulk WhatsApp Campaign HDL",
+        "formDescription": "Upload an Excel file with columns: name | phone. Choose one message or random messages.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "contacts_file",
+              "fieldType": "file",
+              "acceptFileTypes": ".xlsx,.xls,.csv",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "message_mode",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "one"
+                  },
+                  {
+                    "option": "random"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "message_1",
+              "fieldType": "textarea",
+              "placeholder": "Example: أهلاً أ. {{name}}، كنت مهتم بحلول Smart Home؟",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "message_2",
+              "fieldType": "textarea",
+              "placeholder": "Optional - used only when message_mode = random"
+            },
+            {
+              "fieldLabel": "message_3",
+              "fieldType": "textarea",
+              "placeholder": "Optional - used only when message_mode = random"
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "appendAttribution": false,
+          "path": "bulk-whatsapp-campaign"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        64,
+        448
+      ],
+      "id": "d13cfb60-bd0e-4241-a34b-4568d0d9a071",
+      "name": "On form submission",
+      "webhookId": "c4e979c3-8f35-48f3-9ace-f06ff8972d02"
+    },
+    {
+      "parameters": {
+        "content": "# How to use\n\n1. Open the form URL.\n2. Upload Excel/CSV file with columns: `name | phone`.\n3. Select `one` to send Message 1 to all contacts.\n4. Select `random` to randomly choose between Message 1, 2 and 3.\n5. Use `{{name}}` inside any message to personalize it.\n\nExample:\n`أهلاً أ. {{name}}، كنت مهتم بحلول Smart Home؟`",
+        "height": 360,
+        "width": 504,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ccf443fa-0c6f-432a-8d4e-8fc3bc32232d",
+      "name": "Setup Note"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "contacts_file",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [
+        320,
+        448
+      ],
+      "id": "de153aab-44ed-46db-9a55-4dbac8a6c03e",
+      "name": "Read Uploaded Contacts File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $('On form submission').first().json;\n\nconst mode = String(form.message_mode || 'one').toLowerCase().trim();\nconst messages = [\n  String(form.message_1 || '').trim(),\n  String(form.message_2 || '').trim(),\n  String(form.message_3 || '').trim(),\n].filter(Boolean);\n\nreturn items.map((item, index) => {\n  const name = String(item.json.name || item.json.Name || item.json.NAME || '').trim() || 'حضرتك';\n  const rawPhone = String(item.json.phone || item.json.Phone || item.json.PHONE || item.json.mobile || item.json.Mobile || '').trim();\n  const phone = rawPhone.replace(/[^0-9]/g, '');\n\n  let selectedMessage = '';\n  if (mode === 'random' && messages.length > 1) {\n    selectedMessage = messages[Math.floor(Math.random() * messages.length)];\n  } else {\n    selectedMessage = messages[0] || '';\n  }\n\n  selectedMessage = selectedMessage.replaceAll('{{name}}', name);\n\n  return {\n    json: {\n      row_number: index + 2,\n      name,\n      phone: rawPhone,\n      normalized_phone: phone,\n      message_mode: mode,\n      message: selectedMessage,\n      remoteJid: phone ? `${phone}@s.whatsapp.net` : '',\n      status: 'pending'\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        448
+      ],
+      "id": "2aff3d3a-0aa8-47cc-823c-ee99d9331018",
+      "name": "Prepare Rows + Pick Message"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "phone-not-empty",
+              "leftValue": "={{ $json.normalized_phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "message-not-empty",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        448
+      ],
+      "id": "e5de7370-f104-48df-9579-8bc65d901b18",
+      "name": "IF Valid Phone + Message"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1088,
+        384
+      ],
+      "id": "afc2536a-84de-4d6a-b1a6-9574170dc0c6",
+      "name": "Split In Batches"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "keep-row",
+              "name": "row_number",
+              "value": "={{ $json.row_number }}",
+              "type": "number"
+            },
+            {
+              "id": "keep-name",
+              "name": "name",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "keep-phone",
+              "name": "phone",
+              "value": "={{ $json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "keep-remote",
+              "name": "remoteJid",
+              "value": "={{ $json.remoteJid }}",
+              "type": "string"
+            },
+            {
+              "id": "keep-msg",
+              "name": "message",
+              "value": "={{ $json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "keep-status",
+              "name": "status",
+              "value": "sending",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1344,
+        448
+      ],
+      "id": "05b446ae-cd7a-4ebf-9513-1fb8c0a78fb4",
+      "name": "Keep Row Data"
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "HDL",
+        "remoteJid": "={{ $json.remoteJid }}",
+        "messageText": "={{ $json.message }}",
+        "options_message": {
+          "delay": 0
+        }
+      },
+      "type": "n8n-nodes-evolution-api-english.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        448
+      ],
+      "id": "f50c4964-2b5f-42b9-a762-ef8d9276a324",
+      "name": "Evolution API - Send Text",
+      "alwaysOutputData": true,
+      "credentials": {
+        "evolutionApi": {
+          "id": "uQg9SlzUxSve2BtD",
+          "name": "Evolution account HDL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    success: true,\n    message: 'Campaign finished. All valid contacts were sent to Evolution API.',\n    note: 'Invalid rows are skipped automatically if phone or message is empty.'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        208
+      ],
+      "id": "63ad2b53-fb77-4092-959c-89355440b876",
+      "name": "Form Response"
+    },
+    {
+      "parameters": {
+        "content": "# Important\n\nChange `instanceName` in Evolution API if you want to send from LVX instead of HDL.\n\nCurrent instance in this workflow: `HDL`.\n\nThe Excel file must include exactly or similarly named columns:\n`name` and `phone`.\n\nAccepted alternatives: `Name`, `Phone`, `mobile`, `Mobile`.",
+        "height": 280,
+        "width": 500,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        544,
+        0
+      ],
+      "id": "7a1c1943-4132-4c67-a393-77b189ea8bc2",
+      "name": "Evolution Note"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1872,
+        448
+      ],
+      "id": "a2e8fc5e-ae17-4d92-8a9e-7e7a7328e51c",
+      "name": "Wait 3 Seconds",
+      "webhookId": "bulk-whatsapp-wait"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Read Uploaded Contacts File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Uploaded Contacts File": {
+      "main": [
+        [
+          {
+            "node": "Prepare Rows + Pick Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Rows + Pick Message": {
+      "main": [
+        [
+          {
+            "node": "IF Valid Phone + Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid Phone + Message": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "Form Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep Row Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Row Data": {
+      "main": [
+        [
+          {
+            "node": "Evolution API - Send Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution API - Send Text": {
+      "main": [
+        [
+          {
+            "node": "Wait 3 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "97eabd16-3cb4-4efb-8a8c-1eac6db5b2fe",
+  "meta": {
+    "instanceId": "f2bc043fe69d31a15311aa2cd21b3ee292a856ab9721a5e17b127c2d9716878a"
+  },
+  "nodeGroups": [],
+  "id": "m769A5npT2WvIn1X",
+  "tags": []
+}
